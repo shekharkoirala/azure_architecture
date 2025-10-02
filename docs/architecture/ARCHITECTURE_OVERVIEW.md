@@ -15,58 +15,47 @@ The Marketing Content Compliance Assistant is an AI-powered system that analyzes
 
 ## High-Level Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                      Microsoft Word Add-in                       │
-│                    (Client-side JavaScript)                      │
-└────────────────────────────┬────────────────────────────────────┘
-                             │ HTTPS REST API (Async)
-                             │
-┌────────────────────────────▼────────────────────────────────────┐
-│                    Azure API Management                          │
-│           (Authentication, Rate Limiting, Routing)               │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-┌────────────────────────────▼────────────────────────────────────┐
-│                 FastAPI Application Server                       │
-│                  (Azure Container Apps / App Service)            │
-│                                                                   │
-│  ┌────────────────────────────────────────────────────────────┐ │
-│  │              LangGraph Agent Orchestrator                   │ │
-│  │                                                             │ │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  │ │
-│  │  │Guideline │  │Guideline │  │Guideline │  │    ...   │  │ │
-│  │  │    1     │  │    2     │  │    3     │  │          │  │ │
-│  │  └──────────┘  └──────────┘  └──────────┘  └──────────┘  │ │
-│  │                                                             │ │
-│  │              (Parallel execution of N guidelines)           │ │
-│  └────────────────────────────────────────────────────────────┘ │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-         ┌───────────────────┼───────────────────┐
-         │                   │                   │
-         ▼                   ▼                   ▼
-┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
-│  Azure Cosmos   │  │  Azure Blob     │  │    MLflow       │
-│  DB / Postgres  │  │    Storage      │  │   Tracking      │
-│  (Job Status,   │  │  (Articles,     │  │ (Experiments,   │
-│   Results)      │  │   Logs)         │  │   Metrics)      │
-└─────────────────┘  └─────────────────┘  └─────────────────┘
-         │                   │                   │
-         └───────────────────┼───────────────────┘
-                             │
-                             ▼
-                    ┌─────────────────┐
-                    │ Azure Monitor & │
-                    │App Insights     │
-                    │ (Telemetry)     │
-                    └─────────────────┘
+```mermaid
+graph TB
+    User[Microsoft Word Add-in<br/>Client-side JavaScript]
 
-         External Service:
-         ┌─────────────────────────────┐
-         │  CUDAAP Azure OpenAI API    │
-         │  (Claude LLM)               │
-         └─────────────────────────────┘
+    User -->|HTTPS REST API<br/>Async| APIM[Azure API Management<br/>Authentication, Rate Limiting]
+
+    APIM --> FastAPI[FastAPI Application Server<br/>Azure Container Apps]
+
+    FastAPI --> LangGraph[LangGraph Agent Orchestrator]
+
+    LangGraph --> G1[Guideline 1]
+    LangGraph --> G2[Guideline 2]
+    LangGraph --> G3[Guideline 3]
+    LangGraph --> GN[Guideline N...]
+
+    FastAPI -->|Search GTC| SmartSearch[Smart Search API<br/>Retrieve & Download PDFs]
+
+    SmartSearch -->|GTC PDFs| BlobPDF[Azure Blob Storage<br/>GTC PDFs]
+
+    LangGraph -->|Verify with GTC| BlobPDF
+
+    FastAPI --> DB[(Azure PostgreSQL<br/>Job Status, Results)]
+    FastAPI --> Blob[Azure Blob Storage<br/>Articles, Logs]
+    FastAPI --> MLflow[MLflow Tracking<br/>Experiments, Metrics]
+
+    DB --> Monitor[Azure Monitor &<br/>Application Insights]
+    Blob --> Monitor
+    MLflow --> Monitor
+
+    G1 -->|API Call| OpenAI[CUDAAP Azure OpenAI<br/>Claude LLM]
+    G2 -->|API Call| OpenAI
+    G3 -->|API Call| OpenAI
+    GN -->|API Call| OpenAI
+
+    style User fill:#e1f5ff
+    style APIM fill:#fff4e1
+    style FastAPI fill:#e8f5e9
+    style LangGraph fill:#f3e5f5
+    style SmartSearch fill:#fff3e0
+    style OpenAI fill:#fce4ec
+    style Monitor fill:#e0f2f1
 ```
 
 ## Core Components
@@ -140,8 +129,21 @@ The Marketing Content Compliance Assistant is an AI-powered system that analyzes
 - **Azure Monitor**: Infrastructure-level metrics, alerts
 - **Azure Log Analytics**: Centralized log aggregation
 
-### 8. **Security & Identity**
-- **Azure Key Vault**: Store secrets (CUDAAP OpenAI API key, DB credentials)
+### 8. **Smart Search API Integration**
+- **Purpose**: Search and retrieve relevant General Terms & Conditions (GTC) documents
+- **Integration Point**: Called by LangGraph agent during compliance checks
+- **Workflow**:
+  1. Agent identifies need for GTC verification
+  2. Makes API call to Smart Search with search query
+  3. Smart Search returns relevant GTC document references
+  4. System downloads PDF from Smart Search
+  5. Stores PDF in Azure Blob Storage for agent/user verification
+  6. Agent uses GTC content to verify article compliance
+- **API Authentication**: API key or OAuth token (stored in Azure Key Vault)
+- **Caching**: Downloaded GTCs cached in Blob Storage to avoid repeated downloads
+
+### 9. **Security & Identity**
+- **Azure Key Vault**: Store secrets (CUDAAP OpenAI API key, DB credentials, Smart Search API key)
 - **Azure Managed Identity**: Service-to-service authentication
 - **Azure Active Directory**: User authentication for Word Add-in
 
