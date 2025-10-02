@@ -1,4 +1,4 @@
-```graph TD
+graph TD
     Start([User Opens Word Document]) --> Auth{Authenticated?}
     
     Auth -->|No| Login[Login via Azure AD OAuth 2.0]
@@ -70,4 +70,4 @@
     style ShowError429 fill:#ffcdd2
     style ShowErrorFailed fill:#ffcdd2
     style FetchResults fill:#fff9c4
-    style DisplayScore fill:#c8e6c9```
+    style DisplayScore fill:#c8e6c9
