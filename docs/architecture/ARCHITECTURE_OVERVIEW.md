@@ -151,31 +151,57 @@ graph TB
 
 ### Compliance Check Flow (Async)
 
-```
-1. User triggers compliance check in Word Add-in
-   ↓
-2. Add-in sends article content to API Management
-   ↓
-3. API Management authenticates request → forwards to FastAPI
-   ↓
-4. FastAPI receives article, creates job_id, stores in DB
-   ↓
-5. FastAPI returns job_id immediately (202 Accepted)
-   ↓
-6. Add-in polls /jobs/{job_id}/status endpoint
-   ↓
-7. FastAPI processes article with LangGraph agent (async)
-   - Parallel execution of N guideline checks (configurable)
-   - Each check calls CUDAAP Azure OpenAI
-   - MLflow logs experiment data
-   ↓
-8. FastAPI updates job status → stores results in DB
-   ↓
-9. Add-in polls and receives "completed" status
-   ↓
-10. Add-in fetches results from /jobs/{job_id}/result
-    ↓
-11. Add-in displays compliance suggestions in Word
+```mermaid
+sequenceDiagram
+    participant User as Word Add-in
+    participant APIM as API Management
+    participant FastAPI as FastAPI Server
+    participant LangGraph as LangGraph Agent
+    participant SmartSearch as Smart Search API
+    participant Blob as Blob Storage
+    participant OpenAI as Azure OpenAI
+    participant DB as PostgreSQL
+
+    User->>APIM: POST /compliance/check (article content)
+    APIM->>APIM: Authenticate & Rate Limit
+    APIM->>FastAPI: Forward request
+    FastAPI->>DB: Create job (status: pending)
+    FastAPI->>Blob: Store article content
+    FastAPI-->>User: 202 Accepted (job_id)
+
+    User->>APIM: GET /jobs/{job_id}/status (polling)
+    APIM->>FastAPI: Check status
+    FastAPI->>DB: Query job status
+    FastAPI-->>User: status: processing
+
+    par Parallel Guideline Checks
+        FastAPI->>LangGraph: Process article
+        LangGraph->>SmartSearch: Search relevant GTC
+        SmartSearch-->>LangGraph: GTC references
+        LangGraph->>Blob: Download & cache GTC PDFs
+        LangGraph->>OpenAI: Check Guideline 1 (with GTC)
+        OpenAI-->>LangGraph: Result 1
+        LangGraph->>OpenAI: Check Guideline 2 (with GTC)
+        OpenAI-->>LangGraph: Result 2
+        LangGraph->>OpenAI: Check Guideline N
+        OpenAI-->>LangGraph: Result N
+    end
+
+    LangGraph->>FastAPI: Aggregated results
+    FastAPI->>DB: Update job (status: completed)
+    FastAPI->>Blob: Store detailed report
+
+    User->>APIM: GET /jobs/{job_id}/status
+    APIM->>FastAPI: Check status
+    FastAPI-->>User: status: completed
+
+    User->>APIM: GET /jobs/{job_id}/result
+    APIM->>FastAPI: Fetch result
+    FastAPI->>DB: Query results
+    FastAPI->>Blob: Fetch report & GTC PDFs
+    FastAPI-->>User: Compliance results + GTC references
+
+    User->>User: Display results in Word
 ```
 
 ## Design Principles

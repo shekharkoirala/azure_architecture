@@ -9,89 +9,65 @@
 
 This architecture introduces **auto-scaling**, **caching**, and **enhanced monitoring** to handle increased load while maintaining acceptable response times and reliability.
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         Microsoft Word Add-in                        │
-│                       (Office.js + JavaScript)                       │
-└──────────────────────────────────────┬──────────────────────────────┘
-                                       │ HTTPS
-                                       │
-┌──────────────────────────────────────▼──────────────────────────────┐
-│            Azure API Management (Standard Tier)                      │
-│          • Azure AD authentication                                   │
-│          • Rate limiting (500 req/min per user)                      │
-│          • Response caching (5 min TTL)                              │
-│          • Request throttling                                        │
-│          • Advanced analytics                                        │
-└──────────────────────────────────────┬──────────────────────────────┘
-                                       │
-┌──────────────────────────────────────▼──────────────────────────────┐
-│         Azure Container Apps (Dedicated Workload Profile)            │
-│                                                                       │
-│  ┌─────────────────────────────────────────────────────────────┐   │
-│  │              FastAPI Application                             │   │
-│  │    • Async job handling with queue                           │   │
-│  │    • LangGraph agent orchestration                           │   │
-│  │    • Parallel guideline checks (configurable set)            │   │
-│  │    • MLflow tracking                                         │   │
-│  │    • Redis caching integration                               │   │
-│  └─────────────────────────────────────────────────────────────┘   │
-│                                                                       │
-│  CPU: 0.5 vCPU per instance, Memory: 1 GB per instance              │
-│  Min Replicas: 2 (always-on)                                        │
-│  Max Replicas: 10                                                    │
-│  Auto-scale on: CPU > 70% or Request Queue > 100                    │
-└───────────────────────────┬───────────────────────────────────────┬─┘
-                            │                                       │
-        ┌───────────────────┼───────────────────┬──────────────┐   │
-        │                   │                   │              │   │
-        ▼                   ▼                   ▼              ▼   │
-┌───────────────┐  ┌────────────────┐  ┌────────────┐  ┌──────────┐ │
-│ Azure Blob    │  │ PostgreSQL     │  │ Redis Cache│  │ MLflow   │ │
-│ Storage       │  │ Flexible Server│  │ (Basic)    │  │ Storage  │ │
-│ (ZRS)         │  │                │  │            │  │          │ │
-│               │  │ Tier: General  │  │ 1 GB cache │  │          │ │
-│ • Articles    │  │       Purpose  │  │            │  │          │ │
-│ • Logs        │  │ SKU: D2ds_v4   │  │ Use cases: │  │          │ │
-│ • MLflow data │  │ vCore: 2       │  │ • Job      │  │          │ │
-│               │  │ RAM: 8 GB      │  │   status   │  │          │ │
-│ Hot tier      │  │ Storage: 128GB │  │ • Results  │  │          │ │
-│ + Cool tier   │  │ IOPS: 3500     │  │ • Session  │  │          │ │
-│               │  │                │  │   tokens   │  │          │ │
-└───────────────┘  └────────────────┘  └────────────┘  └──────────┘ │
-                           │                                          │
-                           │ (Read replica for reporting)             │
-                           ▼                                          │
-                   ┌────────────────┐                                 │
-                   │ PostgreSQL     │                                 │
-                   │ Read Replica   │                                 │
-                   │ (Optional)     │                                 │
-                   └────────────────┘                                 │
-                                                                       │
-┌────────────────────────────────────────────────────────────┐        │
-│                  Azure Key Vault (Standard)                │        │
-│                                                            │◄───────┘
-│  • CUDAAP_OPENAI_API_KEY                                  │
-│  • DB_CONNECTION_STRING                                    │
-│  • REDIS_CONNECTION_STRING                                 │
-│  • JWT_SECRET_KEY                                          │
-└────────────────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph "Client Layer"
+        WordAddin["Microsoft Word Add-in<br/>(Office.js + JavaScript)"]
+    end
 
-┌────────────────────────────────────────────────────────────┐
-│         Application Insights + Azure Monitor               │
-│                                                            │
-│  • Distributed tracing                                     │
-│  • Custom metrics and dashboards                           │
-│  • Alerts and notifications                                │
-│  • Performance profiling                                   │
-│  • Live metrics stream                                     │
-└────────────────────────────────────────────────────────────┘
+    subgraph "API Gateway"
+        APIM["Azure API Management<br/>(Standard Tier)<br/>• Azure AD Authentication<br/>• Rate Limiting (500 req/min)<br/>• Response Caching (5 min TTL)<br/>• Advanced Analytics"]
+    end
 
-                    External Services
-┌────────────────────────────────────────────────────────────┐
-│            CUDAAP-hosted Azure OpenAI                      │
-│                  (Claude LLM)                              │
-└────────────────────────────────────────────────────────────┘
+    subgraph "Application Layer"
+        ContainerApps["Azure Container Apps<br/>(Dedicated Workload Profile)<br/>CPU: 0.5 vCPU, Memory: 1 GB<br/>Min: 2, Max: 10 replicas<br/>Auto-scale: CPU > 70%"]
+        FastAPI["FastAPI Application<br/>• Async job queue<br/>• LangGraph orchestration<br/>• Redis caching<br/>• MLflow tracking"]
+    end
+
+    subgraph "Data Layer"
+        BlobStorage["Azure Blob Storage (ZRS)<br/>• Articles<br/>• Logs<br/>• MLflow data<br/>• GTC PDFs (cached)<br/>Hot + Cool tiers"]
+        PostgreSQL["PostgreSQL Flexible Server<br/>Tier: General Purpose (D2ds_v4)<br/>vCore: 2, RAM: 8 GB<br/>Storage: 128 GB, IOPS: 3500"]
+        ReadReplica["PostgreSQL Read Replica<br/>(Optional for reporting)"]
+        Redis["Redis Cache (Basic)<br/>1 GB cache<br/>• Job status<br/>• Results<br/>• Session tokens<br/>• GTC metadata"]
+        MLflowStorage["MLflow Storage<br/>(Blob Storage)"]
+    end
+
+    subgraph "Security"
+        KeyVault["Azure Key Vault (Standard)<br/>• CUDAAP_OPENAI_API_KEY<br/>• DB_CONNECTION_STRING<br/>• REDIS_CONNECTION_STRING<br/>• JWT_SECRET_KEY<br/>• SMART_SEARCH_API_KEY"]
+    end
+
+    subgraph "Monitoring"
+        AppInsights["Application Insights + Azure Monitor<br/>• Distributed tracing<br/>• Custom dashboards<br/>• Alerts & notifications<br/>• Performance profiling"]
+    end
+
+    subgraph "External Services"
+        CUDAAP["CUDAAP-hosted Azure OpenAI<br/>(Claude LLM)"]
+        SmartSearch["Smart Search API<br/>• GTC document search<br/>• PDF download<br/>• Metadata retrieval"]
+    end
+
+    WordAddin -->|HTTPS| APIM
+    APIM --> ContainerApps
+    ContainerApps --> FastAPI
+    FastAPI --> BlobStorage
+    FastAPI --> PostgreSQL
+    FastAPI --> Redis
+    FastAPI --> MLflowStorage
+    PostgreSQL --> ReadReplica
+    FastAPI -->|Retrieve secrets| KeyVault
+    FastAPI -->|Compliance checks| CUDAAP
+    FastAPI -->|Search & download GTCs| SmartSearch
+    FastAPI --> AppInsights
+
+    style WordAddin fill:#e1f5ff
+    style APIM fill:#fff4e1
+    style ContainerApps fill:#e8f5e9
+    style FastAPI fill:#e8f5e9
+    style BlobStorage fill:#f3e5f5
+    style PostgreSQL fill:#f3e5f5
+    style Redis fill:#f3e5f5
+    style KeyVault fill:#ffebee
+    style CUDAAP fill:#fce4ec
+    style SmartSearch fill:#fce4ec
 ```
 
 ## Key Improvements Over Small Scale
@@ -260,43 +236,94 @@ This architecture introduces **auto-scaling**, **caching**, and **enhanced monit
 - **Recovery Time Objective (RTO)**: < 15 minutes
 - **Recovery Point Objective (RPO)**: < 5 minutes
 
-## Data Flow with Caching
+## Data Flow with Caching and Smart Search
 
-```
-1. User triggers compliance check in Word Add-in
-   ↓
-2. Add-in sends POST /api/v1/compliance/check
-   ↓
-3. API Management checks cache for duplicate article (optional)
-   ↓
-4. If cache miss → Forward to Container Apps
-   ↓
-5. FastAPI creates job_id, stores in Redis + PostgreSQL
-   ↓
-6. FastAPI returns 202 Accepted with job_id
-   ↓
-7. Add-in polls GET /jobs/{job_id}/status
-   ↓
-8. API Management returns cached status (if available, 5 min TTL)
-   ↓
-9. If cache miss → Query Redis for job status
-   ↓
-10. If Redis miss → Query PostgreSQL
-    ↓
-11. Cache result in Redis for next poll
-    ↓
-12. FastAPI async worker processes job in background
-    - Load article from Blob Storage
-    - Execute N parallel guideline checks
-    - Cache intermediate results in Redis
-    - Update job status in Redis + PostgreSQL
-    - Store final results in PostgreSQL
-    ↓
-13. Add-in fetches GET /jobs/{job_id}/result
-    ↓
-14. API Management serves cached result (if recent, 15 min TTL)
-    ↓
-15. If cache miss → Query PostgreSQL and cache result
+```mermaid
+sequenceDiagram
+    participant User as Word Add-in
+    participant APIM as API Management
+    participant FastAPI as FastAPI Application
+    participant Redis as Redis Cache
+    participant Blob as Blob Storage
+    participant DB as PostgreSQL
+    participant SmartSearch as Smart Search API
+    participant CUDAAP as CUDAAP OpenAI
+
+    User->>APIM: POST /api/v1/compliance/check
+    APIM->>APIM: Check cache for duplicate article
+    APIM->>FastAPI: Forward request (cache miss)
+    FastAPI->>FastAPI: Generate job_id
+    FastAPI->>Redis: Store job status (pending)
+    FastAPI->>DB: Create job record
+    FastAPI->>Blob: Store article content
+    FastAPI->>User: 202 Accepted (job_id)
+
+    FastAPI->>FastAPI: Start async worker
+    FastAPI->>Blob: Load article content
+
+    par GTC Retrieval
+        FastAPI->>Redis: Check GTC metadata cache
+        alt GTC metadata in cache
+            Redis-->>FastAPI: Return cached metadata
+        else GTC not in cache
+            FastAPI->>SmartSearch: Search relevant GTCs
+            SmartSearch-->>FastAPI: Return GTC metadata
+            FastAPI->>Redis: Cache GTC metadata (1 hour TTL)
+        end
+
+        FastAPI->>Blob: Check if GTC PDFs cached
+        alt GTC PDFs not cached
+            FastAPI->>SmartSearch: Download GTC PDFs
+            SmartSearch-->>FastAPI: Return PDF content
+            FastAPI->>Blob: Cache GTC PDFs (30 days TTL)
+        end
+    and Compliance Checks
+        FastAPI->>CUDAAP: Execute guideline checks
+        CUDAAP-->>FastAPI: Return compliance results
+    end
+
+    FastAPI->>FastAPI: Aggregate results
+    FastAPI->>Redis: Update job status (completed)
+    FastAPI->>DB: Store compliance results
+    FastAPI->>Redis: Cache results (15 min TTL)
+
+    loop Poll every 3 seconds
+        User->>APIM: GET /jobs/{job_id}/status
+        alt Status in APIM cache
+            APIM-->>User: Return cached status
+        else Not in APIM cache
+            APIM->>FastAPI: Forward request
+            FastAPI->>Redis: Query job status
+            alt Status in Redis
+                Redis-->>FastAPI: Return status
+            else Not in Redis
+                FastAPI->>DB: Query job status
+                DB-->>FastAPI: Return status
+                FastAPI->>Redis: Cache status (5 min TTL)
+            end
+            FastAPI->>APIM: Return status
+            APIM->>APIM: Cache response (5 min TTL)
+            APIM-->>User: Return status
+        end
+    end
+
+    User->>APIM: GET /jobs/{job_id}/result
+    alt Result in APIM cache
+        APIM-->>User: Return cached result
+    else Not in APIM cache
+        APIM->>FastAPI: Forward request
+        FastAPI->>Redis: Query results
+        alt Results in Redis
+            Redis-->>FastAPI: Return results
+        else Not in Redis
+            FastAPI->>DB: Query results
+            DB-->>FastAPI: Return results
+            FastAPI->>Redis: Cache results (15 min TTL)
+        end
+        FastAPI->>APIM: Return results
+        APIM->>APIM: Cache response (15 min TTL)
+        APIM-->>User: Return results
+    end
 ```
 
 ## Redis Caching Strategy
@@ -307,12 +334,15 @@ job:status:{job_id}          → Job status (TTL: 5 min)
 job:result:{job_id}          → Compliance results (TTL: 15 min)
 user:ratelimit:{user_id}     → Rate limit counter (TTL: 1 min)
 article:hash:{content_hash}  → Duplicate detection (TTL: 1 hour)
+gtc:metadata:{search_hash}   → GTC search results metadata (TTL: 1 hour)
+gtc:location:{gtc_id}        → GTC PDF blob location (TTL: 24 hours)
 ```
 
 ### Cache Invalidation
 - **On Job Completion**: Update `job:status:{job_id}` and `job:result:{job_id}`
 - **On Job Failure**: Remove cached entries
 - **Manual**: Admin API to clear cache for specific job
+- **GTC Updates**: Invalidate GTC cache when Smart Search API reports updates
 
 ## Auto-Scaling Configuration
 
@@ -406,6 +436,211 @@ scale_rules:
 ### Secrets Rotation
 - **Automated**: Key Vault secrets auto-rotation (90 days)
 - **Manual**: Database passwords, API keys (on schedule)
+
+## Smart Search API Integration
+
+### Purpose
+The Smart Search API provides advanced search and retrieval capabilities for General Terms & Conditions (GTC) documents. In the Medium Scale architecture, Smart Search integration is enhanced with multi-layer caching to optimize performance and reduce API costs.
+
+### Integration Architecture
+
+**Medium Scale Enhancements:**
+- **Redis Caching**: GTC metadata cached in Redis (1 hour TTL)
+- **Blob Caching**: GTC PDFs cached in Blob Storage (30 days TTL, ZRS redundancy)
+- **Connection Pooling**: Dedicated HTTP connection pool for Smart Search API calls
+- **Circuit Breaker**: Prevent cascading failures if Smart Search is unavailable
+- **Retry Logic**: Exponential backoff with jitter (3 retries)
+
+### Multi-Layer Caching Strategy
+
+```mermaid
+flowchart TB
+    A[Article Submitted] --> B{GTC metadata<br/>in Redis?}
+    B -->|Yes| C[Load metadata from Redis]
+    B -->|No| D[Call Smart Search API]
+    D --> E[Cache metadata in Redis<br/>1 hour TTL]
+    E --> C
+
+    C --> F{GTC PDF<br/>in Blob Storage?}
+    F -->|Yes| G[Load PDF from Blob]
+    F -->|No| H[Download from Smart Search]
+    H --> I[Store in Blob Storage<br/>30 days TTL]
+    I --> G
+
+    G --> J[Validate Article<br/>Against GTC]
+
+    style B fill:#fff4e1
+    style F fill:#fff4e1
+    style E fill:#e8f5e9
+    style I fill:#e8f5e9
+```
+
+### Redis Cache Strategy for GTCs
+
+**Cache Keys:**
+```python
+# GTC metadata cache (search results)
+gtc:metadata:{search_hash}
+  - TTL: 1 hour
+  - Value: JSON with GTC IDs, titles, relevance scores
+
+# GTC location cache (blob URLs)
+gtc:location:{gtc_id}
+  - TTL: 24 hours
+  - Value: Blob Storage URL and metadata
+
+# GTC search history (analytics)
+gtc:search_history:{user_id}
+  - TTL: 7 days
+  - Value: List of recent search queries
+```
+
+**Cache Hit Rate Target**: >80% for GTC metadata, >70% for GTC PDFs
+
+### Smart Search Client Implementation
+
+```python
+# Pseudo-code for Smart Search client with Redis caching
+class SmartSearchClient:
+    def __init__(self, api_key: str, redis_client: Redis, blob_client: BlobClient):
+        self.api_key = api_key
+        self.redis = redis_client
+        self.blob = blob_client
+        self.circuit_breaker = CircuitBreaker(
+            failure_threshold=5,
+            recovery_timeout=60
+        )
+
+    async def search_gtcs(self, query: str) -> List[GtcMetadata]:
+        """Search GTCs with Redis caching"""
+        # Generate cache key from query
+        search_hash = hashlib.sha256(query.encode()).hexdigest()
+        cache_key = f"gtc:metadata:{search_hash}"
+
+        # Check Redis cache
+        cached_result = await self.redis.get(cache_key)
+        if cached_result:
+            logger.info("GTC metadata cache hit", extra={"search_hash": search_hash})
+            return json.loads(cached_result)
+
+        # Cache miss - call Smart Search API with circuit breaker
+        try:
+            with self.circuit_breaker:
+                results = await self._call_smart_search_api(query)
+
+            # Cache results in Redis (1 hour TTL)
+            await self.redis.setex(
+                cache_key,
+                3600,  # 1 hour
+                json.dumps([r.dict() for r in results])
+            )
+
+            return results
+
+        except CircuitBreakerError:
+            logger.error("Smart Search API circuit breaker open")
+            return []  # Return empty results, continue without GTC validation
+
+    async def download_gtc_pdf(self, gtc_id: str) -> bytes:
+        """Download GTC PDF with Blob Storage caching"""
+        # Check if PDF is in Blob Storage
+        blob_path = f"gtc-cache/{gtc_id}.pdf"
+        cached_pdf = await self.blob.get_blob(blob_path)
+
+        if cached_pdf and not self._is_expired(cached_pdf.metadata):
+            logger.info("GTC PDF cache hit", extra={"gtc_id": gtc_id})
+            return cached_pdf.content
+
+        # Cache miss - download from Smart Search
+        pdf_content = await self._download_from_smart_search(gtc_id)
+
+        # Store in Blob Storage with 30-day TTL
+        await self.blob.upload_blob(
+            blob_path,
+            pdf_content,
+            metadata={
+                "cached_at": datetime.utcnow().isoformat(),
+                "expires_at": (datetime.utcnow() + timedelta(days=30)).isoformat(),
+                "gtc_id": gtc_id
+            }
+        )
+
+        # Update Redis location cache
+        await self.redis.setex(
+            f"gtc:location:{gtc_id}",
+            86400,  # 24 hours
+            blob_path
+        )
+
+        return pdf_content
+
+    async def _call_smart_search_api(self, query: str) -> List[GtcMetadata]:
+        """Call Smart Search API with retry logic"""
+        async with httpx.AsyncClient() as client:
+            for attempt in range(3):
+                try:
+                    response = await client.post(
+                        f"{SMART_SEARCH_BASE_URL}/search",
+                        json={"query": query, "limit": 5},
+                        headers={"Authorization": f"Bearer {self.api_key}"},
+                        timeout=10.0
+                    )
+                    response.raise_for_status()
+                    return [GtcMetadata(**item) for item in response.json()["results"]]
+
+                except httpx.HTTPError as e:
+                    if attempt == 2:  # Last attempt
+                        raise
+                    # Exponential backoff with jitter
+                    await asyncio.sleep(2 ** attempt + random.uniform(0, 1))
+```
+
+### Error Handling and Resilience
+
+**Circuit Breaker Pattern:**
+- Open circuit after 5 consecutive failures
+- Half-open after 60 seconds
+- Close circuit after 2 successful requests
+
+**Fallback Strategies:**
+1. **Smart Search Unavailable**: Continue compliance check without GTC validation
+2. **Partial Results**: Accept cached GTCs even if some downloads fail
+3. **Stale Cache**: Use expired GTC cache if Smart Search is down (with warning)
+
+### Cost Optimization
+
+**Estimated Smart Search API Costs (Medium Scale):**
+- **Searches**: 1,000-5,000 per day at €0.01-0.05 per search = €10-250/day
+- **Downloads**: 200-1,000 per day at €0.10-0.50 per download = €20-500/day
+- **Monthly Estimate**: €900-22,500 (without caching)
+
+**With Multi-Layer Caching:**
+- **Searches**: 80% cache hit → 200-1,000 API calls/day = €2-50/day
+- **Downloads**: 70% cache hit → 60-300 API calls/day = €6-150/day
+- **Monthly Estimate**: €240-6,000 (67-74% cost reduction)
+
+**Target Metrics:**
+- Redis cache hit rate: >80%
+- Blob cache hit rate: >70%
+- Average API calls per article: <0.5
+- Smart Search API costs: <€300/month
+
+### Monitoring and Alerts
+
+**Key Metrics:**
+- `smart_search_api_calls_total` (counter)
+- `smart_search_cache_hit_rate` (gauge)
+- `smart_search_latency_seconds` (histogram)
+- `smart_search_errors_total` (counter)
+- `gtc_cache_size_bytes` (gauge)
+
+**Alerts:**
+- Smart Search API error rate > 5%
+- Cache hit rate < 60%
+- Circuit breaker open for > 5 minutes
+- GTC cache size > 10 GB
+
+For detailed Smart Search integration, see [Smart Search Integration Guide](../api/SMART_SEARCH_INTEGRATION.md).
 
 ## Database Optimization
 

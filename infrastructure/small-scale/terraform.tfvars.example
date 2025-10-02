@@ -1,0 +1,51 @@
+# ---------------------------------------------------------------------------------------------------------------------
+# EXAMPLE TERRAFORM VARIABLES
+# Copy this file to terraform.tfvars and fill in your values
+# ---------------------------------------------------------------------------------------------------------------------
+
+# Project Configuration
+project_name = "mkt-compliance"
+environment  = "dev"
+location     = "westeurope"
+
+# Resource Group
+resource_group_name = "" # Leave empty to auto-generate
+
+# PostgreSQL Configuration
+postgres_version         = "14"
+postgres_sku_name       = "B_Standard_B1ms"  # Burstable 1 vCore, 2GB RAM
+postgres_storage_mb     = 32768              # 32GB
+postgres_admin_username = "psqladmin"
+postgres_database_name  = "compliance_db"
+
+# Storage Configuration
+storage_account_tier        = "Standard"
+storage_account_replication = "LRS"
+
+# Container Apps Configuration
+container_apps_min_replicas = 1
+container_apps_max_replicas = 3
+container_cpu               = 0.5
+container_memory            = "1Gi"
+
+# Container Image (update after first deployment)
+container_image = "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest"
+
+# External API Configuration (REQUIRED - Get these from your Azure OpenAI and Smart Search services)
+cudaap_api_endpoint       = "https://your-openai-instance.openai.azure.com/"
+cudaap_api_key           = "your-openai-api-key"
+smart_search_api_endpoint = "https://your-smart-search-endpoint.com/api"
+smart_search_api_key     = "your-smart-search-api-key"
+
+# MLflow Configuration (optional)
+mlflow_tracking_uri = "" # Leave empty to use blob storage
+
+# Tags
+tags = {
+  Project     = "Marketing-Content-Compliance"
+  Environment = "Development"
+  ManagedBy   = "Terraform"
+  Scale       = "Small"
+  CostCenter  = "Marketing"
+  Owner       = "your-email@company.com"
+}

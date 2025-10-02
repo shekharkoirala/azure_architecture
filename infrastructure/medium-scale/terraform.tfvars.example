@@ -1,0 +1,56 @@
+# ---------------------------------------------------------------------------------------------------------------------
+# EXAMPLE TERRAFORM VARIABLES - MEDIUM SCALE
+# Copy this file to terraform.tfvars and fill in your values
+# ---------------------------------------------------------------------------------------------------------------------
+
+# Project Configuration
+project_name = "mkt-compliance"
+environment  = "staging"
+location     = "westeurope"
+
+# PostgreSQL Configuration
+postgres_version                = "14"
+postgres_sku_name              = "GP_Standard_D2ds_v4"  # General Purpose 2 vCore
+postgres_storage_mb            = 131072                 # 128GB
+postgres_admin_username        = "psqladmin"
+postgres_database_name         = "compliance_db"
+postgres_backup_retention_days = 14
+
+# Redis Cache Configuration
+redis_sku_name  = "Basic"
+redis_family    = "C"
+redis_capacity  = 1  # 1GB
+
+# Storage Configuration
+storage_account_tier        = "Standard"
+storage_account_replication = "GRS"  # Geo-redundant
+
+# Container Apps Configuration
+container_apps_min_replicas = 2
+container_apps_max_replicas = 10
+container_cpu               = 1.0
+container_memory            = "2Gi"
+
+# Container Image
+container_image = "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest"
+
+# API Management Configuration
+apim_sku_name        = "Developer_1"
+apim_publisher_name  = "Marketing Compliance Team"
+apim_publisher_email = "api-admin@company.com"
+
+# External API Configuration
+cudaap_api_endpoint       = "https://your-openai-instance.openai.azure.com/"
+cudaap_api_key           = "your-openai-api-key"
+smart_search_api_endpoint = "https://your-smart-search-endpoint.com/api"
+smart_search_api_key     = "your-smart-search-api-key"
+
+# Tags
+tags = {
+  Project     = "Marketing-Content-Compliance"
+  Environment = "Staging"
+  ManagedBy   = "Terraform"
+  Scale       = "Medium"
+  CostCenter  = "Marketing"
+  Owner       = "your-email@company.com"
+}

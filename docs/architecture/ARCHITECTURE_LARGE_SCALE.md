@@ -9,107 +9,109 @@
 
 This architecture provides **multi-region deployment**, **high availability**, **advanced caching**, **disaster recovery**, and **comprehensive observability** for enterprise-scale operations.
 
-```
-                         Microsoft Word Add-in Users
-                      (Global: EU West, EU North, etc.)
-                                    │
-                                    │ HTTPS
-                                    ▼
-┌─────────────────────────────────────────────────────────────────┐
-│              Azure Front Door (Premium)                          │
-│                                                                  │
-│  • Global load balancing and routing                            │
-│  • WAF (Web Application Firewall)                               │
-│  • DDoS protection                                              │
-│  • SSL/TLS termination                                          │
-│  • Geo-routing (closest region)                                 │
-└──────────────────────┬───────────────────────┬──────────────────┘
-                       │                       │
-        ┌──────────────┴──────────┐   ┌───────┴──────────────┐
-        │                         │   │                      │
-        ▼ West Europe (Primary)   │   ▼ North Europe        │
-┌──────────────────────────────┐  │  ┌─────────────────────────┐
-│  API Management (Premium)    │  │  │ API Management (Premium)│
-│  • Multi-region deployment   │  │  │ • Multi-region replica  │
-│  • Advanced caching          │  │  │ • Geo-replication       │
-│  • Rate limiting             │  │  │ • Failover capability   │
-└───────────┬──────────────────┘  │  └─────────┬───────────────┘
-            │                     │            │
-            ▼                     │            ▼
-┌──────────────────────────────┐  │  ┌─────────────────────────┐
-│ Container Apps Environment   │  │  │ Container Apps Env      │
-│ (Dedicated, West Europe)     │  │  │ (Dedicated, North EU)   │
-│                              │  │  │                         │
-│  Min: 3, Max: 20 instances   │  │  │  Min: 2, Max: 15        │
-│  CPU: 1 vCPU, RAM: 2 GB      │  │  │  CPU: 1 vCPU, RAM: 2GB  │
-└───────────┬──────────────────┘  │  └─────────┬───────────────┘
-            │                     │            │
-            │                     │            │
-    ┌───────┴────────┬────────────┼────────────┴─────┬──────────┐
-    │                │            │                  │          │
-    ▼                ▼            │                  ▼          ▼
-┌─────────┐  ┌──────────────┐    │         ┌──────────────┐  ┌────────┐
-│ Redis   │  │ PostgreSQL   │    │         │ PostgreSQL   │  │ Redis  │
-│ Premium │  │ Flexible     │    │         │ Flexible     │  │Premium │
-│ (West   │  │ (West EU)    │    │         │ (North EU)   │  │(North  │
-│  EU)    │  │              │    │         │              │  │  EU)   │
-│         │  │ HA: Zone-    │    │         │ HA: Zone-    │  │        │
-│ 6 GB    │  │  redundant   │    │         │  redundant   │  │ 6 GB   │
-│ Cluster │  │ Read Replica │    │         │ Read Replica │  │Cluster │
-└─────────┘  └──────┬───────┘    │         └──────┬───────┘  └────────┘
-                    │            │                │
-                    │            │                │
-                    └────────────┼────────────────┘
-                                 │
-                                 │ (Geo-Replication)
-                                 ▼
-                    ┌───────────────────────────┐
-                    │   Azure Blob Storage      │
-                    │   (GZRS - Geo-Zone        │
-                    │    Redundant)             │
-                    │                           │
-                    │  • Articles               │
-                    │  • Compliance reports     │
-                    │  • MLflow artifacts       │
-                    │  • Audit logs             │
-                    └───────────────────────────┘
+```mermaid
+graph TB
+    subgraph "Global Clients"
+        Users["Microsoft Word Add-in Users<br/>(EU West, EU North, Global)"]
+    end
 
-                    ┌───────────────────────────┐
-                    │   Dedicated MLflow        │
-                    │   Infrastructure          │
-                    │   (Container Apps)        │
-                    │                           │
-                    │  • Experiment tracking    │
-                    │  • Model registry         │
-                    │  • Metrics aggregation    │
-                    └───────────────────────────┘
+    subgraph "Global Load Balancer"
+        FrontDoor["Azure Front Door (Premium)<br/>• Global load balancing<br/>• WAF & DDoS protection<br/>• SSL/TLS termination<br/>• Geo-routing"]
+    end
 
-┌─────────────────────────────────────────────────────────────────┐
-│         Monitoring & Observability Stack                         │
-│                                                                  │
-│  • Application Insights (Premium)                               │
-│  • Azure Monitor (Workspaces + Alerts)                          │
-│  • Log Analytics (Dedicated workspace)                          │
-│  • Azure Sentinel (Security monitoring)                         │
-│  • Grafana + Prometheus (Custom dashboards)                     │
-└─────────────────────────────────────────────────────────────────┘
+    subgraph "West Europe Region (Primary)"
+        APIM_WE["API Management (Premium)<br/>• Multi-region deployment<br/>• Advanced caching<br/>• Rate limiting"]
 
-┌─────────────────────────────────────────────────────────────────┐
-│         Security & Compliance                                    │
-│                                                                  │
-│  • Azure Key Vault (Premium with HSM)                           │
-│  • Azure Private Link (VNet integration)                        │
-│  • Azure DDoS Protection Standard                               │
-│  • Azure Policy (Compliance enforcement)                        │
-│  • Azure Backup (Automated backups)                             │
-└─────────────────────────────────────────────────────────────────┘
+        subgraph "West EU Application Layer"
+            ContainerApps_WE["Container Apps Environment<br/>CPU: 1 vCPU, RAM: 2 GB<br/>Min: 3, Max: 20"]
+        end
 
-                    External Services
-┌─────────────────────────────────────────────────────────────────┐
-│            CUDAAP-hosted Azure OpenAI                            │
-│                  (Claude LLM)                                    │
-│            (With retry logic and circuit breaker)                │
-└─────────────────────────────────────────────────────────────────┘
+        subgraph "West EU Data Layer"
+            Redis_WE["Redis Premium (6 GB)<br/>Cluster mode"]
+            PostgreSQL_WE["PostgreSQL Flexible<br/>HA: Zone-redundant<br/>Read Replica"]
+        end
+    end
+
+    subgraph "North Europe Region (Secondary)"
+        APIM_NE["API Management (Premium)<br/>• Geo-replicated<br/>• Failover capability"]
+
+        subgraph "North EU Application Layer"
+            ContainerApps_NE["Container Apps Environment<br/>CPU: 1 vCPU, RAM: 2 GB<br/>Min: 2, Max: 15"]
+        end
+
+        subgraph "North EU Data Layer"
+            Redis_NE["Redis Premium (6 GB)<br/>Cluster mode"]
+            PostgreSQL_NE["PostgreSQL Flexible<br/>HA: Zone-redundant<br/>Read Replica"]
+        end
+    end
+
+    subgraph "Shared Services"
+        BlobStorage["Azure Blob Storage (GZRS)<br/>• Articles<br/>• Compliance reports<br/>• MLflow artifacts<br/>• Audit logs<br/>• GTC PDFs (cached)"]
+        MLflow["Dedicated MLflow Infrastructure<br/>(Container Apps)<br/>• Experiment tracking<br/>• Model registry"]
+        KeyVault["Azure Key Vault (Premium HSM)<br/>• CUDAAP_OPENAI_API_KEY<br/>• DB_CONNECTION_STRING<br/>• REDIS_CONNECTION_STRING<br/>• JWT_SECRET_KEY<br/>• SMART_SEARCH_API_KEY"]
+    end
+
+    subgraph "Monitoring Stack"
+        Monitoring["Monitoring & Observability<br/>• Application Insights (Premium)<br/>• Azure Monitor + Alerts<br/>• Log Analytics<br/>• Azure Sentinel<br/>• Grafana + Prometheus"]
+    end
+
+    subgraph "Security Services"
+        Security["Security & Compliance<br/>• Private Link (VNet)<br/>• DDoS Protection Standard<br/>• Azure Policy<br/>• Azure Backup"]
+    end
+
+    subgraph "External Services"
+        CUDAAP["CUDAAP-hosted Azure OpenAI<br/>(Claude LLM)<br/>Retry logic + Circuit breaker"]
+        SmartSearch["Smart Search API<br/>• Multi-region endpoints<br/>• GTC document search<br/>• PDF download<br/>• High availability"]
+    end
+
+    Users -->|HTTPS| FrontDoor
+    FrontDoor -->|70% traffic| APIM_WE
+    FrontDoor -->|30% traffic| APIM_NE
+
+    APIM_WE --> ContainerApps_WE
+    APIM_NE --> ContainerApps_NE
+
+    ContainerApps_WE --> Redis_WE
+    ContainerApps_WE --> PostgreSQL_WE
+    ContainerApps_NE --> Redis_NE
+    ContainerApps_NE --> PostgreSQL_NE
+
+    ContainerApps_WE --> BlobStorage
+    ContainerApps_NE --> BlobStorage
+    ContainerApps_WE --> MLflow
+    ContainerApps_NE --> MLflow
+
+    ContainerApps_WE --> KeyVault
+    ContainerApps_NE --> KeyVault
+
+    ContainerApps_WE --> CUDAAP
+    ContainerApps_NE --> CUDAAP
+    ContainerApps_WE --> SmartSearch
+    ContainerApps_NE --> SmartSearch
+
+    PostgreSQL_WE -.->|Geo-replication| PostgreSQL_NE
+    Redis_WE -.->|Geo-replication| Redis_NE
+
+    ContainerApps_WE --> Monitoring
+    ContainerApps_NE --> Monitoring
+
+    Security -.->|Protects| ContainerApps_WE
+    Security -.->|Protects| ContainerApps_NE
+
+    style Users fill:#e1f5ff
+    style FrontDoor fill:#fff4e1
+    style APIM_WE fill:#fff4e1
+    style APIM_NE fill:#fff4e1
+    style ContainerApps_WE fill:#e8f5e9
+    style ContainerApps_NE fill:#e8f5e9
+    style BlobStorage fill:#f3e5f5
+    style PostgreSQL_WE fill:#f3e5f5
+    style PostgreSQL_NE fill:#f3e5f5
+    style Redis_WE fill:#f3e5f5
+    style Redis_NE fill:#f3e5f5
+    style KeyVault fill:#ffebee
+    style CUDAAP fill:#fce4ec
+    style SmartSearch fill:#fce4ec
 ```
 
 ## Key Improvements Over Medium Scale
@@ -521,25 +523,30 @@ User Request → Front Door → APIM → Container Apps → PostgreSQL
 ### Network Isolation
 
 **VNet Integration**:
-```
-┌─────────────────────────────────────────┐
-│          Azure VNet (West Europe)       │
-│                                         │
-│  ┌─────────────────────────────────┐   │
-│  │  Container Apps Subnet          │   │
-│  │  10.0.1.0/24                    │   │
-│  └─────────────────────────────────┘   │
-│                                         │
-│  ┌─────────────────────────────────┐   │
-│  │  PostgreSQL Private Endpoint    │   │
-│  │  10.0.2.10                      │   │
-│  └─────────────────────────────────┘   │
-│                                         │
-│  ┌─────────────────────────────────┐   │
-│  │  Redis Private Endpoint         │   │
-│  │  10.0.2.20                      │   │
-│  └─────────────────────────────────┘   │
-└─────────────────────────────────────────┘
+
+```mermaid
+graph TB
+    subgraph VNet["Azure VNet (West Europe) - 10.0.0.0/16"]
+        subgraph Subnet1["Container Apps Subnet - 10.0.1.0/24"]
+            ContainerApps["Container Apps Instances"]
+        end
+
+        subgraph Subnet2["Private Endpoints Subnet - 10.0.2.0/24"]
+            PostgreSQL_PE["PostgreSQL Private Endpoint<br/>10.0.2.10"]
+            Redis_PE["Redis Private Endpoint<br/>10.0.2.20"]
+            Blob_PE["Blob Storage Private Endpoint<br/>10.0.2.30"]
+            KeyVault_PE["Key Vault Private Endpoint<br/>10.0.2.40"]
+        end
+    end
+
+    ContainerApps --> PostgreSQL_PE
+    ContainerApps --> Redis_PE
+    ContainerApps --> Blob_PE
+    ContainerApps --> KeyVault_PE
+
+    style VNet fill:#e8f5e9
+    style Subnet1 fill:#fff4e1
+    style Subnet2 fill:#f3e5f5
 ```
 
 **Firewall Rules**:
@@ -573,6 +580,372 @@ User Request → Front Door → APIM → Container Apps → PostgreSQL
 - All API calls logged to Blob Storage
 - Compliance check history retained for 1 year
 - Immutable audit logs (WORM storage)
+
+## Smart Search API Integration (Enterprise Scale)
+
+### Purpose
+In the Large Scale architecture, Smart Search API integration is designed for **high availability**, **multi-region support**, and **enterprise-grade resilience**. The system can handle GTC retrieval across multiple regions with automatic failover and intelligent routing.
+
+### Multi-Region Integration Architecture
+
+**Large Scale Enhancements:**
+- **Multi-Region Endpoints**: Smart Search API accessed from both West EU and North EU
+- **Geo-Replicated Caching**: GTC PDFs cached in GZRS Blob Storage (both regions)
+- **Redis Geo-Replication**: GTC metadata synchronized across regions
+- **Advanced Circuit Breaker**: Per-region circuit breakers with automatic failover
+- **Distributed Rate Limiting**: Coordinated rate limiting across regions
+- **Health Monitoring**: Continuous health checks on Smart Search API endpoints
+
+### Multi-Region Data Flow
+
+```mermaid
+sequenceDiagram
+    participant User as User (West EU)
+    participant FrontDoor as Azure Front Door
+    participant ContainerWE as Container Apps (West EU)
+    participant RedisWE as Redis (West EU)
+    participant BlobGZRS as Blob Storage (GZRS)
+    participant SmartSearchWE as Smart Search API (West EU)
+    participant SmartSearchNE as Smart Search API (North EU)
+    participant ContainerNE as Container Apps (North EU)
+
+    User->>FrontDoor: Compliance check request
+    FrontDoor->>ContainerWE: Route to West EU
+
+    ContainerWE->>RedisWE: Check GTC metadata cache
+
+    alt Metadata in Redis
+        RedisWE-->>ContainerWE: Return cached metadata
+    else Metadata not in cache
+        ContainerWE->>SmartSearchWE: Search GTCs
+        alt Smart Search WE healthy
+            SmartSearchWE-->>ContainerWE: Return GTC metadata
+        else Smart Search WE unavailable
+            ContainerWE->>SmartSearchNE: Failover to North EU
+            SmartSearchNE-->>ContainerWE: Return GTC metadata
+        end
+        ContainerWE->>RedisWE: Cache metadata (1 hour)
+    end
+
+    ContainerWE->>BlobGZRS: Check GTC PDF cache
+
+    alt PDF in Blob Storage
+        BlobGZRS-->>ContainerWE: Return cached PDF
+    else PDF not cached
+        ContainerWE->>SmartSearchWE: Download PDF
+        alt Download successful
+            SmartSearchWE-->>ContainerWE: Return PDF
+        else Download failed
+            ContainerWE->>SmartSearchNE: Failover download
+            SmartSearchNE-->>ContainerWE: Return PDF
+        end
+        ContainerWE->>BlobGZRS: Cache PDF (30 days, GZRS)
+        Note over BlobGZRS: Auto-replicate to North EU
+    end
+
+    ContainerWE-->>User: Return compliance results with GTC validation
+```
+
+### Geo-Replicated Caching Strategy
+
+**Redis Geo-Replication (Active-Active):**
+```python
+# Cache keys synchronized across regions
+gtc:metadata:{search_hash}@WE  ←→  gtc:metadata:{search_hash}@NE
+gtc:location:{gtc_id}@WE       ←→  gtc:location:{gtc_id}@NE
+
+# Replication lag: < 2 seconds
+# Conflict resolution: Last-write-wins (LWW)
+```
+
+**Blob Storage GZRS (Geo-Zone-Redundant):**
+```
+gtc-cache/
+├── {gtc_id_1}.pdf
+│   ├── Primary: West EU (Zone 1, 2, 3)
+│   └── Secondary: North EU (Zone 1, 2, 3)
+├── {gtc_id_2}.pdf
+└── metadata/
+    ├── cache_index.json (synchronized)
+    └── replication_status.json
+```
+
+**Replication Lag**: < 15 minutes for blob storage (async)
+**Availability**: 99.99% (GZRS SLA)
+
+### Enterprise Smart Search Client
+
+```python
+class EnterpriseSmartSearchClient:
+    def __init__(self, config: Dict):
+        self.primary_endpoint = config["smart_search_primary_endpoint"]
+        self.secondary_endpoint = config["smart_search_secondary_endpoint"]
+        self.redis_cluster = RedisCluster(config["redis_endpoints"])
+        self.blob_client = BlobClient(config["blob_connection_string"])
+
+        # Per-region circuit breakers
+        self.circuit_breaker_primary = CircuitBreaker(
+            failure_threshold=5,
+            recovery_timeout=60,
+            half_open_timeout=30
+        )
+        self.circuit_breaker_secondary = CircuitBreaker(
+            failure_threshold=5,
+            recovery_timeout=60,
+            half_open_timeout=30
+        )
+
+        # Distributed rate limiter
+        self.rate_limiter = DistributedRateLimiter(
+            redis_cluster=self.redis_cluster,
+            max_requests_per_second=100,
+            burst_size=200
+        )
+
+    async def search_gtcs_with_failover(
+        self,
+        query: str,
+        region: str = "west-europe"
+    ) -> List[GtcMetadata]:
+        """Search GTCs with automatic regional failover"""
+
+        # Check distributed rate limiter
+        if not await self.rate_limiter.acquire():
+            raise RateLimitExceeded("Smart Search rate limit exceeded")
+
+        # Generate cache key
+        search_hash = hashlib.sha256(query.encode()).hexdigest()
+        cache_key = f"gtc:metadata:{search_hash}@{region}"
+
+        # Check Redis cache (geo-replicated)
+        cached_result = await self.redis_cluster.get(cache_key)
+        if cached_result:
+            logger.info("GTC metadata cache hit", extra={
+                "search_hash": search_hash,
+                "region": region
+            })
+            return json.loads(cached_result)
+
+        # Determine endpoint based on region
+        endpoint = (
+            self.primary_endpoint if region == "west-europe"
+            else self.secondary_endpoint
+        )
+        circuit_breaker = (
+            self.circuit_breaker_primary if region == "west-europe"
+            else self.circuit_breaker_secondary
+        )
+
+        # Try primary endpoint with circuit breaker
+        try:
+            with circuit_breaker:
+                results = await self._call_smart_search_api(endpoint, query)
+
+            # Cache in Redis (geo-replicated)
+            await self.redis_cluster.setex(
+                cache_key,
+                3600,
+                json.dumps([r.dict() for r in results])
+            )
+
+            return results
+
+        except (CircuitBreakerError, httpx.HTTPError) as e:
+            logger.warning(
+                f"Primary Smart Search endpoint failed, failing over",
+                extra={"region": region, "error": str(e)}
+            )
+
+            # Failover to secondary endpoint
+            secondary_endpoint = (
+                self.secondary_endpoint if region == "west-europe"
+                else self.primary_endpoint
+            )
+            secondary_cb = (
+                self.circuit_breaker_secondary if region == "west-europe"
+                else self.circuit_breaker_primary
+            )
+
+            try:
+                with secondary_cb:
+                    results = await self._call_smart_search_api(
+                        secondary_endpoint,
+                        query
+                    )
+
+                # Cache results
+                await self.redis_cluster.setex(
+                    cache_key,
+                    3600,
+                    json.dumps([r.dict() for r in results])
+                )
+
+                # Alert on failover
+                await self._send_alert(
+                    severity="warning",
+                    message=f"Smart Search failover to {secondary_endpoint}",
+                    region=region
+                )
+
+                return results
+
+            except Exception as e:
+                logger.error(
+                    "Both Smart Search endpoints failed",
+                    extra={"error": str(e)}
+                )
+                # Return empty results, continue without GTC validation
+                return []
+
+    async def download_gtc_pdf_with_redundancy(
+        self,
+        gtc_id: str,
+        region: str = "west-europe"
+    ) -> bytes:
+        """Download GTC PDF with GZRS caching and redundancy"""
+
+        # Check GZRS Blob Storage (auto-replicated)
+        blob_path = f"gtc-cache/{gtc_id}.pdf"
+
+        try:
+            cached_pdf = await self.blob_client.get_blob(
+                container="gtc-cache",
+                blob_name=f"{gtc_id}.pdf"
+            )
+
+            if cached_pdf and not self._is_expired(cached_pdf.metadata):
+                logger.info("GTC PDF cache hit (GZRS)", extra={
+                    "gtc_id": gtc_id,
+                    "cached_at": cached_pdf.metadata.get("cached_at")
+                })
+                return cached_pdf.content
+
+        except BlobNotFoundError:
+            pass  # Proceed to download
+
+        # Download from Smart Search with failover
+        endpoint = (
+            self.primary_endpoint if region == "west-europe"
+            else self.secondary_endpoint
+        )
+
+        for attempt, endpoint in enumerate([
+            endpoint,
+            self.secondary_endpoint if endpoint == self.primary_endpoint
+            else self.primary_endpoint
+        ]):
+            try:
+                pdf_content = await self._download_pdf_from_endpoint(
+                    endpoint,
+                    gtc_id
+                )
+
+                # Store in GZRS Blob Storage (auto-replicates)
+                await self.blob_client.upload_blob(
+                    container="gtc-cache",
+                    blob_name=f"{gtc_id}.pdf",
+                    data=pdf_content,
+                    metadata={
+                        "cached_at": datetime.utcnow().isoformat(),
+                        "expires_at": (
+                            datetime.utcnow() + timedelta(days=30)
+                        ).isoformat(),
+                        "gtc_id": gtc_id,
+                        "source_endpoint": endpoint,
+                        "region": region
+                    },
+                    overwrite=True
+                )
+
+                # Update Redis location cache (geo-replicated)
+                await self.redis_cluster.setex(
+                    f"gtc:location:{gtc_id}@{region}",
+                    86400,  # 24 hours
+                    json.dumps({
+                        "blob_path": blob_path,
+                        "cached_at": datetime.utcnow().isoformat()
+                    })
+                )
+
+                return pdf_content
+
+            except Exception as e:
+                if attempt == 1:  # Last attempt
+                    raise
+                logger.warning(
+                    f"PDF download failed from {endpoint}, retrying",
+                    extra={"gtc_id": gtc_id, "error": str(e)}
+                )
+
+        raise SmartSearchUnavailableError("All Smart Search endpoints failed")
+```
+
+### Cost Optimization (Enterprise Scale)
+
+**Estimated Smart Search API Costs (Large Scale):**
+- **Searches**: 5,000-20,000 per day at €0.01-0.05 per search
+- **Downloads**: 1,000-5,000 per day at €0.10-0.50 per download
+- **Monthly Estimate (without caching)**: €4,500-100,000
+
+**With Multi-Region Geo-Replicated Caching:**
+- **Searches**: 90% cache hit → 500-2,000 API calls/day = €5-100/day
+- **Downloads**: 85% cache hit → 150-750 API calls/day = €15-375/day
+- **Monthly Estimate**: €600-14,250 (87-93% cost reduction)
+
+**Target Metrics (Enterprise):**
+- Redis cache hit rate: >90%
+- Blob cache hit rate: >85%
+- Cross-region replication lag: <5 seconds
+- Smart Search API costs: <€1,000/month
+- Failover success rate: >99.9%
+
+### Monitoring and SLOs
+
+**Service Level Objectives (SLOs):**
+- **Availability**: 99.95% (including Smart Search dependency)
+- **Latency**: P99 < 2 seconds for GTC search
+- **Latency**: P99 < 5 seconds for GTC PDF download
+- **Cache Hit Rate**: >90% for metadata, >85% for PDFs
+- **Failover Time**: <30 seconds for endpoint failover
+
+**Key Metrics:**
+- `smart_search_requests_total` (by region, endpoint, status)
+- `smart_search_cache_hit_rate` (by region, cache layer)
+- `smart_search_latency_seconds` (by operation, region)
+- `smart_search_failovers_total` (by region, reason)
+- `smart_search_circuit_breaker_state` (by region, endpoint)
+- `gtc_cache_size_bytes` (by region)
+- `gtc_replication_lag_seconds` (cross-region)
+
+**Alerts:**
+- P0: Both Smart Search endpoints down for >1 minute
+- P1: Single endpoint down for >5 minutes
+- P1: Circuit breaker open for >10 minutes
+- P1: Cache hit rate <70% for 1 hour
+- P2: Replication lag >30 seconds
+- P2: GTC cache size >50 GB
+- P3: Unusual search pattern detected
+
+### Disaster Recovery for Smart Search Integration
+
+**Scenario 1: Smart Search API Complete Outage**
+- **Fallback**: Use cached GTCs (even if expired) with warning
+- **RTO**: Immediate (no downtime)
+- **RPO**: Last cached version (max 30 days old)
+- **Duration**: Can operate 30 days on cache alone
+
+**Scenario 2: One Region Smart Search Unavailable**
+- **Failover**: Automatic routing to healthy region
+- **RTO**: <30 seconds
+- **Impact**: Minimal (slight latency increase)
+
+**Scenario 3: GTC Cache Corruption**
+- **Recovery**: Re-download from Smart Search API
+- **Bulk Re-caching**: Rate-limited batch download
+- **RTO**: 2-4 hours for full cache rebuild
+- **Mitigation**: GZRS versioning for rollback
+
+For detailed Smart Search integration, see [Smart Search Integration Guide](../api/SMART_SEARCH_INTEGRATION.md).
 
 ## Disaster Recovery Plan
 

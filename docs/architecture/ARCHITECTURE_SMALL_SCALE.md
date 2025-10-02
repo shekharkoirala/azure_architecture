@@ -9,72 +9,60 @@
 
 This architecture is optimized for **minimal cost** while providing a functional compliance checking system. It uses consumption-based pricing wherever possible and avoids redundancy.
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         Microsoft Word Add-in                        │
-│                       (Office.js + JavaScript)                       │
-└──────────────────────────────────┬──────────────────────────────────┘
-                                   │ HTTPS
-                                   │
-┌──────────────────────────────────▼──────────────────────────────────┐
-│               Azure API Management (Consumption Tier)                │
-│          • Authentication (Azure AD)                                 │
-│          • Rate Limiting (100 req/min per user)                      │
-│          • CORS for Word Add-in                                      │
-└──────────────────────────────────┬──────────────────────────────────┘
-                                   │
-┌──────────────────────────────────▼──────────────────────────────────┐
-│            Azure Container Apps (Consumption Plan)                   │
-│                                                                       │
-│  ┌─────────────────────────────────────────────────────────────┐   │
-│  │              FastAPI Application                             │   │
-│  │    • Async job handling                                      │   │
-│  │    • LangGraph agent orchestration                           │   │
-│  │    • Parallel guideline checks (configurable set)            │   │
-│  │    • MLflow tracking                                         │   │
-│  └─────────────────────────────────────────────────────────────┘   │
-│                                                                       │
-│  CPU: 0.25 vCPU, Memory: 0.5 GB                                     │
-│  Min Replicas: 0 (scale to zero)                                    │
-│  Max Replicas: 3                                                     │
-└───────────────────────────┬───────────────────────────────────────┬─┘
-                            │                                       │
-        ┌───────────────────┼───────────────────┐                  │
-        │                   │                   │                  │
-        ▼                   ▼                   ▼                  │
-┌───────────────┐  ┌────────────────┐  ┌────────────────┐         │
-│ Azure Blob    │  │ PostgreSQL     │  │ MLflow Storage │         │
-│ Storage       │  │ Flexible Server│  │ (Blob Storage) │         │
-│ (LRS)         │  │                │  │                │         │
-│               │  │ Tier: Burstable│  │                │         │
-│ • Articles    │  │ SKU: B1ms      │  │                │         │
-│ • Logs        │  │ vCore: 1       │  │                │         │
-│ • MLflow data │  │ RAM: 2 GB      │  │                │         │
-│               │  │ Storage: 32 GB │  │                │         │
-└───────────────┘  └────────────────┘  └────────────────┘         │
-                                                                    │
-                                                                    │
-┌────────────────────────────────────────────────────────────┐     │
-│                  Azure Key Vault (Standard)                │     │
-│                                                            │     │
-│  • CUDAAP_OPENAI_API_KEY                                  │◄────┘
-│  • DB_CONNECTION_STRING                                    │
-│  • JWT_SECRET_KEY                                          │
-└────────────────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph "Client Layer"
+        WordAddin["Microsoft Word Add-in<br/>(Office.js + JavaScript)"]
+    end
 
-┌────────────────────────────────────────────────────────────┐
-│            Application Insights (Basic Tier)               │
-│                                                            │
-│  • Request tracing                                         │
-│  • Error logging                                           │
-│  • Basic metrics                                           │
-└────────────────────────────────────────────────────────────┘
+    subgraph "API Gateway"
+        APIM["Azure API Management<br/>(Consumption Tier)<br/>• Azure AD Authentication<br/>• Rate Limiting (100 req/min)<br/>• CORS"]
+    end
 
-                    External Services
-┌────────────────────────────────────────────────────────────┐
-│            CUDAAP-hosted Azure OpenAI                      │
-│                  (Claude LLM)                              │
-└────────────────────────────────────────────────────────────┘
+    subgraph "Application Layer"
+        ContainerApps["Azure Container Apps<br/>(Consumption Plan)<br/>CPU: 0.25 vCPU, Memory: 0.5 GB<br/>Min: 0, Max: 3 replicas"]
+        FastAPI["FastAPI Application<br/>• Async job handling<br/>• LangGraph orchestration<br/>• Parallel guideline checks<br/>• MLflow tracking"]
+    end
+
+    subgraph "Data Layer"
+        BlobStorage["Azure Blob Storage (LRS)<br/>• Articles<br/>• Logs<br/>• MLflow data<br/>• GTC PDFs (cached)"]
+        PostgreSQL["PostgreSQL Flexible Server<br/>Tier: Burstable (B1ms)<br/>vCore: 1, RAM: 2 GB<br/>Storage: 32 GB"]
+        MLflowStorage["MLflow Storage<br/>(Blob Storage)"]
+    end
+
+    subgraph "Security"
+        KeyVault["Azure Key Vault (Standard)<br/>• CUDAAP_OPENAI_API_KEY<br/>• DB_CONNECTION_STRING<br/>• JWT_SECRET_KEY<br/>• SMART_SEARCH_API_KEY"]
+    end
+
+    subgraph "Monitoring"
+        AppInsights["Application Insights (Basic)<br/>• Request tracing<br/>• Error logging<br/>• Basic metrics"]
+    end
+
+    subgraph "External Services"
+        CUDAAP["CUDAAP-hosted Azure OpenAI<br/>(Claude LLM)"]
+        SmartSearch["Smart Search API<br/>• GTC document search<br/>• PDF download"]
+    end
+
+    WordAddin -->|HTTPS| APIM
+    APIM --> ContainerApps
+    ContainerApps --> FastAPI
+    FastAPI --> BlobStorage
+    FastAPI --> PostgreSQL
+    FastAPI --> MLflowStorage
+    FastAPI -->|Retrieve secrets| KeyVault
+    FastAPI -->|Compliance checks| CUDAAP
+    FastAPI -->|Search & download GTCs| SmartSearch
+    FastAPI --> AppInsights
+
+    style WordAddin fill:#e1f5ff
+    style APIM fill:#fff4e1
+    style ContainerApps fill:#e8f5e9
+    style FastAPI fill:#e8f5e9
+    style BlobStorage fill:#f3e5f5
+    style PostgreSQL fill:#f3e5f5
+    style KeyVault fill:#ffebee
+    style CUDAAP fill:#fce4ec
+    style SmartSearch fill:#fce4ec
 ```
 
 ## Azure Resources
@@ -133,6 +121,7 @@ This architecture is optimized for **minimal cost** while providing a functional
   - `DB-CONNECTION-STRING`
   - `JWT-SECRET-KEY`
   - `BLOB-STORAGE-CONNECTION-STRING`
+  - `SMART-SEARCH-API-KEY` (for GTC document retrieval)
 - **Cost**: ~€0.03 per 10,000 operations
 - **Estimated Monthly Cost**: €1-3
 
@@ -178,65 +167,205 @@ This architecture is optimized for **minimal cost** while providing a functional
 
 ## Data Flow
 
-### Article Submission Flow
+### Article Submission Flow with Smart Search Integration
 
-```
-1. User clicks "Check Compliance" in Word Add-in
-   ↓
-2. Add-in extracts article text (max 50 KB for MVP)
-   ↓
-3. Add-in sends POST /api/v1/compliance/check
-   Headers: Authorization: Bearer <azure_ad_token>
-   Body: { "article_content": "...", "user_id": "..." }
-   ↓
-4. API Management validates token → routes to Container Apps
-   ↓
-5. FastAPI receives request:
-   - Generates job_id (UUID)
-   - Stores article in Blob Storage
-   - Creates job record in PostgreSQL (status: "pending")
-   - Returns 202 Accepted with job_id
-   ↓
-6. FastAPI async worker processes job:
-   - Loads article from Blob Storage
-   - Initializes LangGraph agent
-   - Executes N guideline checks in parallel (configurable set)
-   - Each check calls CUDAAP Azure OpenAI
-   - MLflow logs experiment data
-   - Aggregates results
-   - Updates job status to "completed"
-   - Stores results in PostgreSQL
-   ↓
-7. Word Add-in polls GET /api/v1/jobs/{job_id}/status every 3 seconds
-   ↓
-8. When status = "completed", Add-in fetches GET /api/v1/jobs/{job_id}/result
-   ↓
-9. Add-in displays compliance suggestions in Word
+```mermaid
+sequenceDiagram
+    participant User as Word Add-in
+    participant APIM as API Management
+    participant FastAPI as FastAPI Application
+    participant Blob as Blob Storage
+    participant DB as PostgreSQL
+    participant SmartSearch as Smart Search API
+    participant CUDAAP as CUDAAP OpenAI
+
+    User->>APIM: POST /api/v1/compliance/check<br/>(article content)
+    APIM->>APIM: Validate Azure AD token
+    APIM->>FastAPI: Forward request
+    FastAPI->>FastAPI: Generate job_id
+    FastAPI->>Blob: Store article content
+    FastAPI->>DB: Create job record (status: pending)
+    FastAPI->>User: 202 Accepted (job_id)
+
+    FastAPI->>FastAPI: Start async worker
+    FastAPI->>Blob: Load article content
+    FastAPI->>FastAPI: Initialize LangGraph agent
+
+    par Parallel Processing
+        FastAPI->>SmartSearch: Search relevant GTCs
+        SmartSearch-->>FastAPI: Return GTC metadata
+        FastAPI->>SmartSearch: Download GTC PDFs
+        SmartSearch-->>FastAPI: Return PDF content
+        FastAPI->>Blob: Cache GTC PDFs (30 days)
+    and
+        FastAPI->>CUDAAP: Execute guideline checks
+        CUDAAP-->>FastAPI: Return compliance results
+    end
+
+    FastAPI->>FastAPI: Aggregate results
+    FastAPI->>DB: Update job status (completed)
+    FastAPI->>DB: Store compliance results
+
+    loop Poll every 3 seconds
+        User->>APIM: GET /api/v1/jobs/{job_id}/status
+        APIM->>FastAPI: Forward request
+        FastAPI->>DB: Query job status
+        FastAPI->>User: Return status
+    end
+
+    User->>APIM: GET /api/v1/jobs/{job_id}/result
+    APIM->>FastAPI: Forward request
+    FastAPI->>DB: Retrieve compliance results
+    FastAPI->>User: Return detailed results
+    User->>User: Display suggestions in Word
 ```
 
-### Parallel Guideline Checking (LangGraph)
+### Parallel Guideline Checking with GTC Retrieval (LangGraph)
 
 ```python
-# Pseudo-code for LangGraph agent
+# Pseudo-code for LangGraph agent with Smart Search integration
 async def check_compliance(article_content: str, guidelines: List[Guideline]):
     with mlflow.start_run():
         mlflow.log_param("article_length", len(article_content))
         mlflow.log_param("num_guidelines", len(guidelines))
 
-        # Parallel execution of N guidelines (configurable)
-        tasks = [
+        # Step 1: Search and retrieve relevant GTCs
+        gtc_search_task = search_relevant_gtcs(article_content)
+
+        # Step 2: Parallel execution of N guidelines (configurable)
+        guideline_tasks = [
             check_guideline(article_content, guideline)
             for guideline in guidelines
         ]
 
-        results = await asyncio.gather(*tasks)
+        # Execute GTC search and guideline checks in parallel
+        gtc_documents, *guideline_results = await asyncio.gather(
+            gtc_search_task,
+            *guideline_tasks
+        )
+
+        # Step 3: Validate article against retrieved GTCs
+        if gtc_documents:
+            gtc_validation = await validate_against_gtcs(
+                article_content,
+                gtc_documents
+            )
+            guideline_results.append(gtc_validation)
+            mlflow.log_param("gtc_documents_found", len(gtc_documents))
 
         # Aggregate results
-        compliance_report = aggregate_results(results)
+        compliance_report = aggregate_results(guideline_results)
         mlflow.log_metric("compliance_score", compliance_report.score)
 
         return compliance_report
+
+async def search_relevant_gtcs(article_content: str) -> List[GtcDocument]:
+    """Search and download relevant GTC documents using Smart Search API"""
+    # Extract keywords/entities from article for search
+    search_query = extract_search_terms(article_content)
+
+    # Call Smart Search API
+    search_results = await smart_search_client.search(query=search_query)
+
+    # Download and cache GTC PDFs
+    gtc_documents = []
+    for result in search_results:
+        # Check if already cached in Blob Storage
+        cached_pdf = await blob_storage.get_cached_gtc(result.gtc_id)
+
+        if not cached_pdf:
+            # Download from Smart Search
+            pdf_content = await smart_search_client.download_pdf(result.gtc_id)
+            # Cache in Blob Storage (30 days TTL)
+            await blob_storage.cache_gtc(result.gtc_id, pdf_content, ttl_days=30)
+            cached_pdf = pdf_content
+
+        gtc_documents.append(GtcDocument(
+            id=result.gtc_id,
+            content=cached_pdf,
+            relevance_score=result.score
+        ))
+
+    return gtc_documents
 ```
+
+## Smart Search API Integration
+
+### Purpose
+The Smart Search API is an external service that provides search and retrieval capabilities for General Terms & Conditions (GTC) documents. During compliance checking, the system uses Smart Search to:
+1. Find relevant GTC documents based on article content
+2. Download GTC PDFs for validation
+3. Cache downloaded PDFs to reduce API calls and costs
+
+### Integration Points
+
+**In Small Scale Architecture:**
+- **Location**: FastAPI application makes direct API calls to Smart Search
+- **Authentication**: API key stored in Azure Key Vault
+- **Caching**: GTC PDFs cached in Azure Blob Storage (30-day TTL)
+- **Error Handling**: Graceful degradation if Smart Search is unavailable
+- **Rate Limiting**: Respect Smart Search API rate limits (if applicable)
+
+### GTC Caching Strategy
+
+```mermaid
+flowchart LR
+    A[Article Submitted] --> B{GTC in Cache?}
+    B -->|Yes| C[Load from Blob Storage]
+    B -->|No| D[Call Smart Search API]
+    D --> E[Download GTC PDF]
+    E --> F[Store in Blob Storage]
+    F --> G[Set 30-day TTL]
+    G --> C
+    C --> H[Validate Article]
+```
+
+**Blob Storage Structure:**
+```
+gtc-cache/
+├── {gtc_id_1}.pdf (cached 2025-09-15, expires 2025-10-15)
+├── {gtc_id_2}.pdf (cached 2025-09-20, expires 2025-10-20)
+└── metadata.json (tracking cache entries)
+```
+
+**Cache Lifecycle:**
+- **TTL**: 30 days from download
+- **Eviction**: Automatic deletion after expiration
+- **Refresh**: Re-download if requested after expiration
+- **Storage Cost**: ~€0.018/GB/month (Hot tier)
+
+### Error Handling
+
+**Scenario 1: Smart Search API Unavailable**
+- Retry with exponential backoff (3 attempts)
+- If all retries fail: Continue compliance check without GTC validation
+- Log error to Application Insights
+- Return partial results with warning
+
+**Scenario 2: GTC Not Found**
+- Log search query for analysis
+- Continue compliance check with available guidelines
+- Include "GTC not found" in compliance report
+
+**Scenario 3: PDF Download Failure**
+- Retry download (2 attempts)
+- Fall back to cached version if available (even if expired)
+- Log failure for manual investigation
+
+### Cost Considerations
+
+**Smart Search API Costs:**
+- Depends on Smart Search pricing model (per search, per download, subscription)
+- **Estimated**: €0.01-0.05 per search + €0.10-0.50 per PDF download
+- **Monthly Estimate (Small Scale)**: €20-50 (assuming 200-500 articles/day, 20% requiring GTC lookup)
+
+**Optimization Strategies:**
+1. Aggressive caching (30-day TTL reduces repeat downloads)
+2. Batch GTC searches when possible
+3. Implement rate limiting to avoid excessive API calls
+4. Monitor cache hit rate (target: >60%)
+
+For detailed Smart Search integration, see [Smart Search Integration Guide](../api/SMART_SEARCH_INTEGRATION.md).
 
 ## Deployment Configuration
 
@@ -271,6 +400,8 @@ properties:
             secretRef: openai-api-key
           - name: DB_CONNECTION_STRING
             secretRef: db-connection-string
+          - name: SMART_SEARCH_API_KEY
+            secretRef: smart-search-api-key
           - name: ENVIRONMENT
             value: "production"
     scale:
